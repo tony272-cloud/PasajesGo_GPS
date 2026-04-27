@@ -1,0 +1,400 @@
+# Diseño e Implementación Completa de Plataforma de Seguimiento GPS para Autobuses en Tiempo Real
+
+## Contexto y Objetivo
+
+Actúa como un **arquitecto de software senior full-stack** con experiencia en sistemas IoT, geoespaciales y aplicaciones en tiempo real. Tu tarea es diseñar e implementar **desde cero** una plataforma profesional, segura y escalable para el seguimiento GPS de autobuses en tiempo real.
+
+La plataforma debe:
+- Recibir y procesar posiciones GPS de autobuses en tiempo real
+- Mostrar los autobuses moviéndose sobre un mapa interactivo
+- Gestionar flotas, rutas, paradas, operadores y pasajeros
+- Exponer APIs seguras y documentadas
+- Ser escalable, mantenible y seguir buenas prácticas de seguridad
+
+---
+
+## Stack Tecnológico
+
+Define y justifica cada elección, pero usa como base:
+
+| Capa | Tecnología sugerida |
+|------|-------------------|
+| Backend API | Node.js + NestJS (TypeScript) |
+| Base de datos principal | PostgreSQL + PostGIS |
+| Tiempo real | WebSockets (Socket.IO o NestJS Gateway) |
+| Cola de mensajes | Redis (pub/sub + caché) |
+| Frontend web | React + TypeScript + Mapbox GL JS o Leaflet |
+| App móvil (conductor) | Flutter (Dart) |
+| Autenticación | JWT + Refresh Tokens + OAuth2 |
+| Contenedores | Docker + Docker Compose |
+| CI/CD | GitHub Actions |
+| Documentación API | Swagger/OpenAPI 3.0 |
+
+---
+
+## Arquitectura del Sistema
+
+Diseña y explica en detalle cada capa:
+
+### 1. Capa de Dispositivo (Bus)
+- App Flutter en el smartphone del conductor
+- Envío de telemetría cada `N` segundos vía HTTPS POST
+- Buffer local de posiciones cuando no hay conectividad (SQLite local)
+- Reconexión automática y envío de datos diferidos con timestamp original
+- Autenticación del dispositivo con token de bus único y rotatorio
+
+### 2. Capa de Ingestión
+- Endpoint REST dedicado y optimizado para alto volumen de escritura
+- Validación estricta del payload (latitud, longitud dentro de rangos válidos, velocidad máxima razonable, etc.)
+- Descarte de puntos con baja precisión GPS (accuracy > 50m)
+- Publicación en Redis pub/sub para propagación en tiempo real
+
+### 3. Capa de Procesamiento
+- Microservicio de normalización: map-matching básico, cálculo de heading si no viene del dispositivo
+- Motor de ETA por parada basado en distancia restante sobre la polilínea de la ruta y velocidad promedio rolling
+- Motor de alertas: exceso de velocidad, desvío de ruta, bus detenido más de X minutos, geocerca de parada activada
+
+### 4. Capa de Persistencia
+- PostgreSQL con PostGIS para toda la lógica geoespacial
+- Redis para caché de última posición por bus y contadores de sesión
+- Particionamiento por fecha en la tabla de posiciones históricas
+
+### 5. Capa de Tiempo Real
+- Gateway WebSocket con autenticación por token
+- Canales segmentados por ruta/línea para evitar saturar clientes
+- Emisión de eventos de actualización de posición, alertas y cambios de estado
+
+### 6. Capa de Frontend
+- Panel de administración con mapa en tiempo real de toda la flota
+- Vista de pasajeros con ETA y posición de su bus
+- Dashboards de analítica y reportes de desempeño
+
+---
+
+## Diseño de Base de Datos
+
+Crea el esquema SQL completo con PostGIS para las siguientes entidades:
+
+### Tablas requeridas:
+
+```sql
+-- Usuarios del sistema (operadores, administradores, conductores, pasajeros)
+users (id, email, password_hash, role ENUM, is_active, created_at, updated_at)
+
+-- Empresas / organizaciones de transporte
+organizations (id, name, ruc_or_tax_id, contact_email, is_active, created_at)
+
+-- Autobuses / vehículos
+buses (id, organization_id, plate, model, capacity, device_token_hash, status ENUM, created_at)
+
+-- Líneas de ruta
+routes (id, organization_id, name, color_hex, is_active)
+
+-- Paradas
+stops (id, route_id, name, sequence_order, geom GEOMETRY(Point, 4326), radius_meters)
+
+-- Polilínea de cada ruta (trayecto en el mapa)
+route_paths (id, route_id, path GEOMETRY(LineString, 4326))
+
+-- Asignación bus ↔ ruta ↔ conductor para un turno
+trips (id, bus_id, route_id, driver_id, started_at, ended_at, status ENUM)
+
+-- Posiciones históricas (particionada por mes)
+bus_positions (
+  id BIGSERIAL,
+  bus_id UUID,
+  trip_id UUID,
+  ts TIMESTAMPTZ NOT NULL,
+  geom GEOMETRY(Point, 4326) NOT NULL,
+  speed_kmh NUMERIC,
+  heading_deg NUMERIC,
+  accuracy_m NUMERIC,
+  PRIMARY KEY (id, ts)
+) PARTITION BY RANGE (ts);
+
+-- Geocercas de alertas
+geofences (id, organization_id, name, geom GEOMETRY(Polygon, 4326), alert_type ENUM)
+
+-- Alertas generadas
+alerts (id, bus_id, trip_id, type ENUM, message, ts, geom GEOMETRY(Point, 4326), resolved_at)
+
+-- Tokens de refresh
+refresh_tokens (id, user_id, token_hash, expires_at, revoked, created_at)
+
+-- Auditoría de acciones críticas
+audit_logs (id, user_id, action, entity_type, entity_id, ip_address, metadata JSONB, created_at)
+Incluye también:
+
+Todos los índices necesarios (GiST para geometrías, BTREE para IDs y timestamps)
+
+Constraints de integridad (FK, CHECK, UNIQUE)
+
+Migrations versionadas (TypeORM o Flyway)
+
+🔐 Seguridad (Programación Segura)
+Implementa y documenta cada uno de los siguientes controles de seguridad:
+
+Autenticación y Autorización
+JWT con expiración corta (15 min) + Refresh Token con rotación (7 días, un solo uso)
+
+Estrategia de autenticación diferenciada: usuarios humanos (email+password) y dispositivos/buses (API key + secret)
+
+RBAC (Role-Based Access Control) con roles: SUPERADMIN, ORG_ADMIN, OPERATOR, DRIVER, PASSENGER
+
+Guards por rol en cada endpoint con decoradores en NestJS
+
+Invalidación global de tokens al cambiar contraseña o detectar compromiso
+
+Protección de Endpoints
+Rate limiting por IP y por usuario (p. ej. 100 req/min para usuario normal, 1000 req/min para buses)
+
+Throttling diferenciado por endpoint (ingestión de telemetría vs consultas de mapa)
+
+Validación y sanitización de todos los inputs con class-validator y class-transformer
+
+Prevención de mass assignment (DTOs estrictos, nunca pasar entidades directamente)
+
+Protección contra inyección SQL (ORM con parámetros vinculados, nunca concatenar SQL)
+
+Comunicaciones
+HTTPS obligatorio (TLS 1.2+) en todos los endpoints, incluyendo WebSockets (WSS)
+
+CORS configurado con lista blanca explícita de dominios
+
+Headers de seguridad HTTP (Helmet): Content-Security-Policy, X-Frame-Options, HSTS, X-Content-Type-Options
+
+Datos Sensibles
+Hashing de contraseñas con bcrypt (cost factor 12)
+
+Almacenamiento de tokens de dispositivo como hash (SHA-256), nunca en texto plano
+
+Nunca devolver password_hash, token_hash ni datos sensibles en respuestas API
+
+Variables de entorno para secretos (.env + validación con @nestjs/config + Joi schema)
+
+Secrets rotation para tokens de bus
+
+Auditoría
+Log de todas las acciones críticas: login, logout, cambio de contraseña, CRUD de buses/rutas, generación de alertas
+
+Tabla audit_logs con IP, user-agent, timestamp y payload de cambio (antes/después en JSONB)
+
+Logs de aplicación estructurados en JSON (Winston o Pino) con nivel por ambiente
+
+Detección de accesos inusuales: múltiples IPs para un mismo usuario, patrones de fuerza bruta
+🔄 CRUDs Completos
+Para cada entidad, implementa los endpoints REST con su lógica de negocio, validaciones y control de acceso:
+
+Entidades con CRUD completo:
+Organizaciones (/api/v1/organizations)
+
+Solo SUPERADMIN puede crear/eliminar organizaciones
+
+Soft delete (campo is_active)
+
+Usuarios (/api/v1/users)
+
+Registro con verificación de email
+
+Un ORG_ADMIN solo puede gestionar usuarios de su organización
+
+Cambio de contraseña con verificación de contraseña actual
+
+Endpoint separado para cambio de rol (solo SUPERADMIN)
+
+Autobuses (/api/v1/buses)
+
+Al crear un bus, generar y devolver un device_token (solo en ese momento, luego solo el hash se guarda)
+
+Endpoint para rotar el token de un bus (POST /buses/:id/rotate-token)
+
+Filtros: por estado, por ruta asignada actualmente, paginación
+
+Rutas y Paradas (/api/v1/routes, /api/v1/routes/:id/stops)
+
+Al crear/actualizar una ruta, validar que las paradas tengan orden secuencial sin gaps
+
+Endpoint para reordenar paradas (PATCH /routes/:id/stops/reorder)
+
+Al crear la ruta, recibir y guardar la polilínea GeoJSON del trayecto en PostGIS
+
+Viajes/Turnos (/api/v1/trips)
+
+Iniciar viaje: asigna bus + ruta + conductor, valida que el bus no tenga un viaje activo
+
+Finalizar viaje: cierra el turno, calcula métricas (distancia total, tiempo, paradas cubiertas)
+
+Historial de viajes con paginación y filtros por fecha, ruta, bus, conductor
+
+Posiciones (/api/v1/telemetry — solo escritura por dispositivos)
+
+POST /telemetry: recibe array de posiciones (batch) para cubrir desconexiones
+
+Validar token de dispositivo, insertar con PostGIS, publicar en Redis
+
+GET /buses/:id/positions/history: historial con filtro de rango de fechas, paginación, retorna GeoJSON
+
+Alertas (/api/v1/alerts)
+
+CRUD para configurar reglas de alerta por organización
+
+Endpoint para marcar alertas como resueltas
+
+Filtros por tipo, bus, ruta, rango de fechas
+
+Geocercas (/api/v1/geofences)
+
+Crear/editar polígonos en GeoJSON que se almacenan en PostGIS
+
+Evaluación de geocercas en tiempo real al ingerir cada posición
+
+⚡ Tiempo Real
+Diseña e implementa el sistema WebSocket con:
+
+Eventos del servidor al cliente:
+// Actualización de posición de un bus
+'bus:position' → { busId, lat, lon, speed, heading, ts }
+
+// Cambio de estado de un bus
+'bus:status' → { busId, status, ts }
+
+// Alerta generada
+'alert:new' → { alertId, busId, type, message, geom, ts }
+
+// ETA actualizado para una parada
+'stop:eta' → { stopId, busId, etaSeconds, ts }
+Eventos del cliente al servidor:
+// Suscribirse a una ruta
+'subscribe:route' → { routeId }
+
+// Suscribirse a un bus específico
+'subscribe:bus' → { busId }
+Autenticación del WebSocket con JWT en el handshake
+
+Namespaces separados: /fleet para operadores, /public para pasajeros
+
+Reconexión automática con backoff exponencial en el cliente
+🗺️ Frontend — Panel de Administración
+Implementa en React + TypeScript + Mapbox GL JS (o Leaflet):
+
+Vistas requeridas:
+Dashboard: KPIs en tiempo real (buses activos, alertas abiertas, buses fuera de ruta, ETA promedio de cumplimiento)
+
+Mapa en vivo: todos los buses de la organización moviéndose con suavidad, agrupados por ruta, tooltips con info del bus
+
+Vista de ruta: seleccionar una línea y ver sus buses en vivo con ETA en cada parada
+
+Gestión de flota: tabla con CRUDs de buses, conductores, rutas, paradas
+
+Historial de viaje: reproducir el trayecto de un viaje en el mapa (playback)
+
+Reportes: tiempo promedio en ruta, cumplimiento de horarios, velocidades, exportar a CSV/PDF
+
+Comportamiento del mapa:
+Marcadores de bus con rotación según heading_deg para mostrar dirección
+
+Interpolación suave de movimiento entre actualizaciones
+
+Clustering de marcadores cuando hay muchos buses juntos
+
+Leyenda de rutas con colores y conteo de buses activos por ruta
+
+📱 App Móvil Flutter (Conductor)
+Implementa la app del conductor con:
+
+Login con email/password + almacenamiento seguro del token (flutter_secure_storage)
+
+Iniciar/finalizar turno (seleccionar ruta)
+
+Servicio de ubicación en background (geolocator + flutter_background_service)
+
+Cola de posiciones con SQLite local para envío diferido
+
+Indicador visual de estado de conexión y sincronización
+
+Mapa con su posición actual y la ruta asignada
+
+🐳 Infraestructura y DevOps
+Docker Compose (desarrollo):
+services:
+  postgres:    # PostgreSQL 16 + PostGIS 3.4
+  redis:       # Redis 7 (pub/sub + caché)
+  backend:     # NestJS API
+  frontend:    # React (Nginx)
+  pgadmin:     # Solo en desarrollo
+Variables de entorno (.env):
+Define todas las variables necesarias con nombre, tipo, valor de ejemplo y si es secreto:
+
+DATABASE_URL, REDIS_URL
+
+JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN
+
+MAPBOX_PUBLIC_TOKEN
+
+SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+
+CORS_ORIGINS
+
+TELEMETRY_RATE_LIMIT_PER_MIN
+
+CI/CD con GitHub Actions:
+Pipeline: lint → unit tests → integration tests → build Docker → push a registry → deploy staging
+
+🧪 Testing
+Implementa cobertura de tests para:
+
+Unit tests: servicios de cálculo de ETA, validadores de telemetría, lógica de geocercas (Jest)
+
+Integration tests: endpoints REST con base de datos de prueba (supertest + PostgreSQL de test)
+
+E2E tests: flujo completo: login → iniciar viaje → enviar posiciones → verificar evento WebSocket → finalizar viaje
+
+Mocks de Redis y servicios externos en tests unitarios
+
+Al menos 80% de cobertura en servicios core
+
+📄 Documentación
+Genera automáticamente:
+
+Swagger/OpenAPI 3.0 en /api/docs con ejemplos de request/response para cada endpoint
+
+Colección de Postman con todos los endpoints y variables de entorno
+
+README.md con instrucciones de setup, arquitectura visual (diagrama Mermaid), y guía de contribución
+
+Diagrama ERD de la base de datos
+
+📦 Entregables Esperados
+Al finalizar, el sistema debe incluir:
+
+Código fuente completo del backend (NestJS) con módulos separados por dominio
+
+Código fuente del frontend (React) con componentes reutilizables y estado global (Zustand o Redux Toolkit)
+
+Código fuente de la app Flutter del conductor
+
+Scripts SQL de migración completos y versionados
+
+Docker Compose funcional para levantar todo el entorno en un comando
+
+Documentación Swagger autogenerada
+
+Suite de tests con cobertura ≥80% en lógica core
+
+README completo con diagrama de arquitectura
+
+⚠️ Restricciones y Principios
+Nunca hardcodear secretos, tokens ni credenciales en el código
+
+Siempre usar DTOs con validación estricta; nunca exponer entidades de base de datos directamente
+
+Siempre manejar errores con mensajes genéricos al cliente y detalles solo en logs internos
+
+Seguir principios SOLID y arquitectura por módulos/dominios
+
+Cada endpoint debe tener al menos un test de éxito y uno de error
+
+Toda consulta geoespacial debe usar índices GiST; prohibido hacer ST_Distance sin índice
+
+Los datos de pasajeros son sensibles: aplicar principio de mínimo privilegio en todas las consultas
+Comienza por diseñar el esquema de base de datos completo con los scripts SQL, luego la estructura de módulos del backend, y ve avanzando capa por capa hasta el frontend y la app móvil. Justifica cada decisión de diseño.

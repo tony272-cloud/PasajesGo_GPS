@@ -1,0 +1,5 @@
+﻿src/App.tsx(12,51): error TS2503: Cannot find namespace 'JSX'.
+src/pages/dashboard/LiveMap.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/dashboard/LiveMap.tsx(5,1): error TS6133: 'apiClient' is declared but its value is never read.
+src/pages/dashboard/LiveMap.tsx(6,1): error TS6192: All imports in import declaration are unused.
+src/services/socket.service.ts(2,1): error TS6133: 'useAuthStore' is declared but its value is never read.

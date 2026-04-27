@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: pasajesgo_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: ${POSTGRES_DB:-pasajesgo_db}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d  # auto-run schema.sql on first boot
+    networks:
+      - pasajesgo_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: pasajesgo_redis
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pasajesgo_net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pasajesgo_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@pasajesgo.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+    ports:
+      - "5051:80"
+    depends_on:
+      - postgres
+    networks:
+      - pasajesgo_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  pasajesgo_net:
+    driver: bridge
