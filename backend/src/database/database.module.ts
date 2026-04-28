@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PartitionMaintenanceService } from './partition-maintenance.service';
 
 @Module({
   imports: [
@@ -16,5 +17,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       }),
     }),
   ],
+  providers: [PartitionMaintenanceService],
 })
 export class DatabaseModule {}

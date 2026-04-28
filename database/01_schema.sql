@@ -92,9 +92,17 @@ CREATE TABLE bus_positions (
     PRIMARY KEY (id, ts)
 ) PARTITION BY RANGE (ts);
 
--- Example Partition for current month (will need cron/job to create future partitions)
-CREATE TABLE bus_positions_y2026m03 PARTITION OF bus_positions
-    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+-- Example Partitions for 2026
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m03 PARTITION OF bus_positions FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m04 PARTITION OF bus_positions FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m05 PARTITION OF bus_positions FOR VALUES FROM ('2026-05-01') TO ('2026-06-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m06 PARTITION OF bus_positions FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m07 PARTITION OF bus_positions FOR VALUES FROM ('2026-07-01') TO ('2026-08-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m08 PARTITION OF bus_positions FOR VALUES FROM ('2026-08-01') TO ('2026-09-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m09 PARTITION OF bus_positions FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m10 PARTITION OF bus_positions FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m11 PARTITION OF bus_positions FOR VALUES FROM ('2026-11-01') TO ('2026-12-01');
+CREATE TABLE IF NOT EXISTS bus_positions_y2026m12 PARTITION OF bus_positions FOR VALUES FROM ('2026-12-01') TO ('2027-01-01');
 
 CREATE TABLE geofences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

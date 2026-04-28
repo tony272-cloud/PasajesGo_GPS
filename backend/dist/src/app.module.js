@@ -49,6 +49,7 @@ const fleet_module_1 = require("./fleet/fleet.module");
 const telemetry_module_1 = require("./telemetry/telemetry.module");
 const alerts_module_1 = require("./alerts/alerts.module");
 const realtime_module_1 = require("./realtime/realtime.module");
+const schedule_1 = require("@nestjs/schedule");
 const Joi = __importStar(require("joi"));
 let AppModule = class AppModule {
 };
@@ -56,6 +57,7 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            schedule_1.ScheduleModule.forRoot(),
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
                 validationSchema: Joi.object({

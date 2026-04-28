@@ -7,10 +7,12 @@ import { FleetModule } from './fleet/fleet.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import * as Joi from 'joi';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: Joi.object({

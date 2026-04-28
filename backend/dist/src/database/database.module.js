@@ -10,6 +10,7 @@ exports.DatabaseModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const config_1 = require("@nestjs/config");
+const partition_maintenance_service_1 = require("./partition-maintenance.service");
 let DatabaseModule = class DatabaseModule {
 };
 exports.DatabaseModule = DatabaseModule;
@@ -28,6 +29,7 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 }),
             }),
         ],
+        providers: [partition_maintenance_service_1.PartitionMaintenanceService],
     })
 ], DatabaseModule);
 //# sourceMappingURL=database.module.js.map
